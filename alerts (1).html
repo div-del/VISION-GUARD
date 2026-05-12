@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VisionGuard — Alert Feed</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+  :root {
+    --bg:#080c12;--surface:#0d1420;--panel:#111827;
+    --border:rgba(255,255,255,0.07);--text:#e2e8f0;--muted:#64748b;
+    --accent:#22d3ee;--accent2:#818cf8;--warn:#f59e0b;
+    --danger:#ef4444;--safe:#10b981;
+    --font-head:'Syne',sans-serif;--font-mono:'Space Mono',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font-head);min-height:100vh;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:52px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;}
+  .logo{font-size:15px;font-weight:800;letter-spacing:0.08em;color:var(--accent);display:flex;align-items:center;gap:10px;}
+  .logo-icon{width:28px;height:28px;border:2px solid var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;}
+  .back-btn{font-size:12px;color:var(--muted);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;font-family:var(--font-mono);}
+  .back-btn:hover{color:var(--text);}
+
+  .page{display:grid;grid-template-columns:1fr 380px;height:calc(100vh - 52px);overflow:hidden;}
+
+  /* Left: incident log */
+  .log-area{overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;}
+  .section-title{font-size:11px;font-weight:700;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;display:flex;align-items:center;gap:8px;}
+  .section-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+  .filter-btn{font-family:var(--font-mono);font-size:10px;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all 0.15s;letter-spacing:0.05em;}
+  .filter-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(34,211,238,0.08);}
+  .filter-btn.f-danger.active{border-color:var(--danger);color:var(--danger);background:rgba(239,68,68,0.08);}
+  .filter-btn.f-warn.active{border-color:var(--warn);color:var(--warn);background:rgba(245,158,11,0.08);}
+  .filter-btn.f-safe.active{border-color:var(--safe);color:var(--safe);background:rgba(16,185,129,0.08);}
+  .search-box{flex:1;min-width:200px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:var(--font-mono);font-size:11px;color:var(--text);outline:none;transition:border-color 0.15s;}
+  .search-box:focus{border-color:var(--accent);}
+  .search-box::placeholder{color:var(--muted);}
+
+  .incident-table{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+  .table-header{display:grid;grid-template-columns:60px 1fr 130px 100px 90px 80px;gap:0;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);}
+  .th{font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;}
+
+  .incident-row{display:grid;grid-template-columns:60px 1fr 130px 100px 90px 80px;gap:0;padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.15s;align-items:center;}
+  .incident-row:last-child{border-bottom:none;}
+  .incident-row:hover{background:rgba(255,255,255,0.02);}
+  .incident-row.selected{background:rgba(34,211,238,0.04);border-left:2px solid var(--accent);}
+  .incident-row.new{animation:row-flash 0.6s ease;}
+  @keyframes row-flash{from{background:rgba(239,68,68,0.15);}to{background:transparent;}}
+
+  .sev-badge{display:inline-block;font-family:var(--font-mono);font-size:9px;font-weight:700;padding:3px 8px;border-radius:3px;letter-spacing:0.05em;}
+  .sev-critical{background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);}
+  .sev-warning{background:rgba(245,158,11,0.12);color:#fbbf24;border:1px solid rgba(245,158,11,0.25);}
+  .sev-info{background:rgba(34,211,238,0.1);color:var(--accent);border:1px solid rgba(34,211,238,0.2);}
+  .sev-resolved{background:rgba(100,116,139,0.12);color:var(--muted);border:1px solid rgba(100,116,139,0.2);}
+
+  .td-type{font-size:12px;font-weight:600;}
+  .td-cam{font-size:11px;color:var(--muted);font-family:var(--font-mono);}
+  .td-time{font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+  .td-conf{font-family:var(--font-mono);font-size:11px;}
+  .td-dispatch{font-size:10px;font-weight:700;}
+  .dispatch-yes{color:var(--safe);}
+  .dispatch-no{color:var(--muted);}
+  .dispatch-pending{color:var(--warn);}
+
+  /* Right: detail panel */
+  .detail-panel{background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
+  .detail-header{padding:16px;border-bottom:1px solid var(--border);}
+  .detail-id{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;margin-bottom:4px;}
+  .detail-type{font-size:18px;font-weight:800;}
+  .detail-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;}
+
+  .detail-section{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;}
+  .ds-label{font-size:9px;font-weight:700;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase;margin-bottom:10px;}
+  .info-row{display:flex;justify-content:space-between;margin-bottom:7px;font-size:12px;}
+  .info-key{color:var(--muted);}
+  .info-val{font-family:var(--font-mono);color:var(--text);font-size:11px;}
+
+  .snapshot-box{width:100%;aspect-ratio:16/9;background:var(--panel);border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:10px;color:var(--muted);overflow:hidden;position:relative;}
+
+  .action-btns{display:flex;flex-direction:column;gap:8px;padding:16px;border-top:1px solid var(--border);}
+  .action-btn{padding:9px 16px;border-radius:6px;font-family:var(--font-head);font-size:12px;font-weight:700;letter-spacing:0.06em;cursor:pointer;border:1px solid;transition:all 0.2s;text-align:center;}
+  .btn-dispatch{background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.35);color:#f87171;}
+  .btn-dispatch:hover{background:rgba(239,68,68,0.2);}
+  .btn-resolve{background:rgba(16,185,129,0.1);border-color:rgba(16,185,129,0.25);color:var(--safe);}
+  .btn-resolve:hover{background:rgba(16,185,129,0.18);}
+  .btn-clip{background:rgba(129,140,248,0.1);border-color:rgba(129,140,248,0.25);color:var(--accent2);}
+  .btn-clip:hover{background:rgba(129,140,248,0.18);}
+
+  .timeline-log{display:flex;flex-direction:column;gap:0;}
+  .tl-item{display:flex;gap:10px;padding:8px 0;position:relative;}
+  .tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+  .tl-dot-crit{background:var(--danger);}
+  .tl-dot-warn{background:var(--warn);}
+  .tl-dot-safe{background:var(--safe);}
+  .tl-dot-info{background:var(--accent);}
+  .tl-content{flex:1;}
+  .tl-event{font-size:12px;color:var(--text);}
+  .tl-time{font-family:var(--font-mono);font-size:10px;color:var(--muted);}
+
+  .confidence-ring{display:flex;justify-content:center;padding:10px 0;}
+
+  .stat-mini-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .stat-mini{background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:10px;text-align:center;}
+  .sm-val{font-family:var(--font-mono);font-size:20px;font-weight:700;margin-bottom:2px;}
+  .sm-label{font-size:9px;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="logo"><div class="logo-icon">◈</div>VISIONGUARD — ALERT FEED</div>
+  <a class="back-btn" href="index.html">← BACK TO MONITOR</a>
+</div>
+
+<div class="page">
+  <!-- Left: incident log -->
+  <div class="log-area">
+    <div class="section-title">Incident Log</div>
+    <div class="filters">
+      <input class="search-box" id="search" placeholder="Search by type, camera, location..." oninput="filterIncidents()">
+      <button class="filter-btn f-danger active" onclick="toggleFilter('critical',this)">CRITICAL</button>
+      <button class="filter-btn f-warn active" onclick="toggleFilter('warning',this)">WARNING</button>
+      <button class="filter-btn active" onclick="toggleFilter('info',this)">INFO</button>
+      <button class="filter-btn f-safe active" onclick="toggleFilter('resolved',this)">RESOLVED</button>
+    </div>
+
+    <div class="incident-table">
+      <div class="table-header">
+        <div class="th">SEV</div>
+        <div class="th">TYPE</div>
+        <div class="th">CAMERA</div>
+        <div class="th">TIME</div>
+        <div class="th">CONFIDENCE</div>
+        <div class="th">DISPATCH</div>
+      </div>
+      <div id="incident-body"></div>
+    </div>
+  </div>
+
+  <!-- Right: detail panel -->
+  <div class="detail-panel">
+    <div class="detail-header">
+      <div class="detail-id" id="d-id">SELECT AN INCIDENT</div>
+      <div class="detail-type" id="d-type" style="font-size:14px;color:var(--muted);">Click any row to view details</div>
+    </div>
+    <div class="detail-body" id="detail-body">
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;">
+        No incident selected
+      </div>
+    </div>
+    <div class="action-btns" id="action-btns" style="display:none;">
+      <button class="action-btn btn-dispatch" onclick="dispatch()">⚑ DISPATCH POLICE — SEND ALERT</button>
+      <button class="action-btn btn-resolve" onclick="resolve()">✓ MARK AS RESOLVED</button>
+      <button class="action-btn btn-clip">⬇ EXPORT VIDEO CLIP</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function timeAgo(min) {
+  if(min === 0) return 'Just now';
+  if(min < 60) return `${min}m ago`;
+  return `${Math.floor(min/60)}h ${min%60}m ago`;
+}
+function timeOf(min) {
+  const d = new Date(Date.now() - min*60000);
+  return d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+}
+
+const INCIDENTS = [
+  { id:'INC-0047', sev:'critical', type:'Aggressive Behavior', cam:'CAM-02 · Platform A', zone:'Platform A', minsAgo:1, conf:91, dispatch:'dispatched', lat:12.9716, lon:77.5946, desc:'Two individuals engaged in physical altercation near turnstile. Screaming audio detected simultaneously. Officer dispatch initiated.', frames:143, fps:30 },
+  { id:'INC-0046', sev:'critical', type:'Screaming Detected', cam:'CAM-02 · Platform A', zone:'Platform A', minsAgo:2, conf:87, dispatch:'pending', lat:12.9716, lon:77.5946, desc:'High-decibel audio anomaly detected (94dB peak). Matches distress signature. Visual confirms crowd reaction.', frames:88, fps:30 },
+  { id:'INC-0045', sev:'warning', type:'Loitering > 3min', cam:'CAM-04 · Exit North', zone:'Exit North', minsAgo:7, conf:78, dispatch:'no', lat:12.9720, lon:77.5950, desc:'Individual stationary for 4m 12s near emergency exit door. No prior incidents. Monitoring active.', frames:374, fps:30 },
+  { id:'INC-0044', sev:'warning', type:'Crowd Surge', cam:'CAM-01 · Main Gate', zone:'Main Gate', minsAgo:18, conf:83, dispatch:'dispatched', lat:12.9710, lon:77.5940, desc:'Crowd density exceeded 80 persons/m². Pressure wave detected moving toward gates. Barriers deployed.', frames:310, fps:30 },
+  { id:'INC-0043', sev:'info', type:'Unusual Object', cam:'CAM-03 · Parking Lot', zone:'Parking Lot', minsAgo:32, conf:62, dispatch:'no', lat:12.9725, lon:77.5960, desc:'Unattended bag detected for 8+ minutes near column 12. Flagged for manual review by security.', frames:492, fps:30 },
+  { id:'INC-0042', sev:'resolved', type:'Perimeter Breach', cam:'CAM-01 · Main Gate', zone:'Main Gate', minsAgo:55, conf:89, dispatch:'dispatched', lat:12.9710, lon:77.5940, desc:'Individual entered restricted zone. Security personnel responded within 2m 14s. Person escorted out. Resolved.', frames:180, fps:30 },
+  { id:'INC-0041', sev:'resolved', type:'Fall Detected', cam:'CAM-06 · Stairwell B', zone:'Stairwell B', minsAgo:68, conf:95, dispatch:'dispatched', lat:12.9718, lon:77.5948, desc:'Person detected falling on stairwell. Medical response dispatched. Scene cleared in 8m 42s. Medical assistance provided.', frames:62, fps:30 },
+  { id:'INC-0040', sev:'resolved', type:'Aggressive Behavior', cam:'CAM-05 · Concourse', zone:'Concourse', minsAgo:92, conf:82, dispatch:'dispatched', lat:12.9715, lon:77.5944, desc:'Verbal altercation escalating. Officers responded. De-escalated before physical contact. Persons warned.', frames:258, fps:30 },
+];
+
+let activeFilters = new Set(['critical','warning','info','resolved']);
+let selectedId = null;
+
+function toggleFilter(f, btn) {
+  if(activeFilters.has(f)){activeFilters.delete(f);btn.classList.remove('active');}
+  else{activeFilters.add(f);btn.classList.add('active');}
+  renderTable();
+}
+
+function filterIncidents() { renderTable(); }
+
+function renderTable() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const filtered = INCIDENTS.filter(i => {
+    if(!activeFilters.has(i.sev)) return false;
+    if(q && !i.type.toLowerCase().includes(q) && !i.cam.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const sevClass = {critical:'sev-critical',warning:'sev-warning',info:'sev-info',resolved:'sev-resolved'};
+  const sevLabel = {critical:'CRIT',warning:'WARN',info:'INFO',resolved:'OK'};
+  const dispatchClass = {dispatched:'dispatch-yes',pending:'dispatch-pending',no:'dispatch-no'};
+  const dispatchLabel = {dispatched:'✓ SENT',pending:'PENDING',no:'—'};
+  const confColor = c => c>=85?'var(--safe)':c>=70?'var(--warn)':'var(--danger)';
+
+  document.getElementById('incident-body').innerHTML = filtered.map(inc => `
+    <div class="incident-row ${selectedId===inc.id?'selected':''}" onclick="selectIncident('${inc.id}')">
+      <div><span class="sev-badge ${sevClass[inc.sev]}">${sevLabel[inc.sev]}</span></div>
+      <div>
+        <div class="td-type">${inc.type}</div>
+        <div class="td-cam">${inc.zone}</div>
+      </div>
+      <div class="td-cam">${inc.cam}</div>
+      <div>
+        <div class="td-time">${timeOf(inc.minsAgo)}</div>
+        <div style="font-size:10px;color:var(--muted);font-family:var(--font-mono);">${timeAgo(inc.minsAgo)}</div>
+      </div>
+      <div class="td-conf" style="color:${confColor(inc.conf)}">${inc.conf}%</div>
+      <div class="td-dispatch ${dispatchClass[inc.dispatch]}">${dispatchLabel[inc.dispatch]}</div>
+    </div>
+  `).join('');
+}
+renderTable();
+
+function selectIncident(id) {
+  selectedId = id;
+  renderTable();
+  const inc = INCIDENTS.find(i=>i.id===id);
+  if(!inc) return;
+
+  document.getElementById('d-id').textContent = `#${inc.id} · ${inc.cam}`;
+  const sevColor = {critical:'var(--danger)',warning:'var(--warn)',info:'var(--accent)',resolved:'var(--safe)'}[inc.sev];
+  document.getElementById('d-type').innerHTML = `<span style="color:${sevColor}">${inc.type}</span>`;
+
+  const confColor = inc.conf>=85?'var(--safe)':inc.conf>=70?'var(--warn)':'var(--danger)';
+
+  document.getElementById('detail-body').innerHTML = `
+    <!-- Snapshot placeholder -->
+    <div class="snapshot-box">
+      <canvas id="snap-canvas" width="340" height="191"></canvas>
+    </div>
+
+    <div class="stat-mini-grid">
+      <div class="stat-mini"><div class="sm-val" style="color:${confColor}">${inc.conf}%</div><div class="sm-label">Confidence</div></div>
+      <div class="stat-mini"><div class="sm-val" style="color:var(--accent2)">${inc.frames}</div><div class="sm-label">Frames</div></div>
+      <div class="stat-mini"><div class="sm-val" style="color:var(--accent)">${inc.fps}</div><div class="sm-label">FPS</div></div>
+      <div class="stat-mini"><div class="sm-val" style="color:var(--warn)">${Math.floor(inc.frames/inc.fps)}s</div><div class="sm-label">Duration</div></div>
+    </div>
+
+    <div class="detail-section">
+      <div class="ds-label">Incident Details</div>
+      <div class="info-row"><span class="info-key">Zone</span><span class="info-val">${inc.zone}</span></div>
+      <div class="info-row"><span class="info-key">Camera</span><span class="info-val">${inc.cam}</span></div>
+      <div class="info-row"><span class="info-key">Timestamp</span><span class="info-val">${timeOf(inc.minsAgo)}</span></div>
+      <div class="info-row"><span class="info-key">GPS</span><span class="info-val">${inc.lat.toFixed(4)}N, ${inc.lon.toFixed(4)}E</span></div>
+      <div class="info-row"><span class="info-key">Dispatch</span><span class="info-val" style="color:${inc.dispatch==='dispatched'?'var(--safe)':inc.dispatch==='pending'?'var(--warn)':'var(--muted)'}">${inc.dispatch.toUpperCase()}</span></div>
+      <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.6;">${inc.desc}</div>
+    </div>
+
+    <div class="detail-section">
+      <div class="ds-label">Event Timeline</div>
+      <div class="timeline-log" id="tl-log"></div>
+    </div>
+  `;
+
+  // Draw snapshot
+  const sc = document.getElementById('snap-canvas');
+  const sctx = sc.getContext('2d');
+  drawSnap(sctx, sc.width, sc.height, inc.sev);
+
+  // Timeline
+  const tls = [
+    { dot:'tl-dot-info', text:'Behavior anomaly flagged by ML model', mins: inc.minsAgo+1 },
+    { dot:'tl-dot-crit', text:'Confidence crossed threshold — alert raised', mins: inc.minsAgo },
+    { dot: inc.dispatch!=='no'?'tl-dot-warn':'tl-dot-info', text: inc.dispatch!=='no'?'Police notification sent with GPS + snapshot':'Flagged for manual review', mins: Math.max(0,inc.minsAgo-1) },
+    ...(inc.sev==='resolved'?[{dot:'tl-dot-safe',text:'Incident resolved by responders',mins:Math.max(0,inc.minsAgo-12)}]:[]),
+  ];
+
+  document.getElementById('tl-log').innerHTML = tls.map(t=>`
+    <div class="tl-item">
+      <div class="tl-dot ${t.dot}"></div>
+      <div class="tl-content">
+        <div class="tl-event">${t.text}</div>
+        <div class="tl-time">${timeOf(t.mins)}</div>
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('action-btns').style.display = 'flex';
+}
+
+function drawSnap(ctx, W, H, sev) {
+  ctx.fillStyle = sev==='critical'?'#1a0808':sev==='warning'?'#1a1208':'#0d1420';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.04)';
+  ctx.lineWidth=1;
+  for(let x=0;x<W;x+=30){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=30){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // Ground
+  ctx.strokeStyle='rgba(255,255,255,0.08)';
+  ctx.beginPath();ctx.moveTo(0,H*0.72);ctx.lineTo(W,H*0.72);ctx.stroke();
+
+  // Person silhouettes
+  const colors = sev==='critical'?['#ef4444','#f87171']:sev==='warning'?['#f59e0b','#fbbf24']:['#22d3ee'];
+  for(let p=0;p<(sev==='critical'?3:sev==='warning'?2:1);p++){
+    const px = 60+p*100, py=H*0.70, ph=55;
+    ctx.fillStyle=colors[p%colors.length]+'88';
+    ctx.fillRect(px-10,py-ph,20,ph*0.6);
+    ctx.beginPath();ctx.arc(px,py-ph-8,9,0,Math.PI*2);ctx.fill();
+
+    ctx.strokeStyle=sev==='critical'?'#ef4444':sev==='warning'?'#f59e0b':'#22d3ee';
+    ctx.lineWidth=1.5;
+    ctx.strokeRect(px-16,py-ph-18,32,ph+18);
+    ctx.fillStyle=sev==='critical'?'#ef4444':sev==='warning'?'#f59e0b':'#22d3ee';
+    ctx.fillRect(px-16,py-ph-30,65,13);
+    ctx.fillStyle='#fff';
+    ctx.font='9px monospace';
+    ctx.fillText(`PERSON ${p+1}`, px-13, py-ph-20);
+  }
+
+  // Timestamp
+  ctx.fillStyle='rgba(255,255,255,0.3)';
+  ctx.font='10px monospace';
+  ctx.fillText('⚫ REC  '+(new Date().toLocaleTimeString('en-IN',{hour12:false})), 8, H-8);
+}
+
+function dispatch() {
+  const btn = event.target;
+  if(selectedId){
+    const inc = INCIDENTS.find(i=>i.id===selectedId);
+    if(inc) inc.dispatch='dispatched';
+    renderTable();
+    btn.textContent='✓ DISPATCHED — ETA 4min';
+    btn.style.background='rgba(16,185,129,0.12)';
+    btn.style.borderColor='rgba(16,185,129,0.3)';
+    btn.style.color='var(--safe)';
+  }
+}
+
+function resolve() {
+  if(selectedId){
+    const inc = INCIDENTS.find(i=>i.id===selectedId);
+    if(inc){inc.sev='resolved';inc.dispatch=inc.dispatch==='dispatched'?'dispatched':'no';}
+    renderTable();
+    selectIncident(selectedId);
+  }
+}
+
+// Simulate incoming alert
+setTimeout(()=>{
+  INCIDENTS.unshift({
+    id:'INC-0048', sev:'critical', type:'Crowd Surge Detected', cam:'CAM-05 · Concourse', zone:'Concourse',
+    minsAgo:0, conf:88, dispatch:'pending', lat:12.9715, lon:77.5944,
+    desc:'Rapid crowd density increase at concourse entry. Crush risk elevated. Automated barriers activated.', frames:60, fps:30
+  });
+  renderTable();
+  const row = document.querySelector('.incident-row');
+  if(row) row.classList.add('new');
+}, 10000);
+</script>
+</body>
+</html>
