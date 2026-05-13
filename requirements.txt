@@ -1,11 +1,13 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg2-binary
-python-dotenv
-python-multipart
-pillow
-aiofiles
-fastapi-mail
-pydantic[email]
-alembic
+cat > requirements.txt << 'EOF'
+fastapi==0.110.0
+uvicorn==0.29.0
+sqlalchemy==2.0.29
+python-dotenv==1.0.1
+python-multipart==0.0.9
+pillow==10.3.0
+aiofiles==23.2.1
+pydantic[email]==2.7.0
+alembic==1.13.1
+gunicorn==21.2.0
+psycopg2-binary==2.9.9
+EOF
