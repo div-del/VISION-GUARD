@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VisionGuard — Smart CCTV Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #080c12;
+    --surface: #0d1420;
+    --panel: #111827;
+    --border: rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.15);
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --accent: #22d3ee;
+    --accent2: #818cf8;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --safe: #10b981;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-head);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 28px; height: 28px;
+    border: 2px solid var(--accent);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(16,185,129,0.1);
+    border: 1px solid rgba(16,185,129,0.25);
+    border-radius: 20px;
+    padding: 3px 10px;
+    color: var(--safe);
+  }
+
+  .dot-pulse {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--safe);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  #clock { color: var(--text); }
+
+  /* Layout */
+  .layout {
+    display: grid;
+    grid-template-columns: 200px 1fr 280px;
+    grid-template-rows: auto;
+    height: calc(100vh - 52px);
+    overflow: hidden;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+  }
+
+  .sidebar-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    color: var(--muted);
+    padding: 8px 16px 4px;
+    text-transform: uppercase;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(34,211,238,0.06); }
+
+  .nav-icon { width: 16px; font-size: 14px; text-align: center; }
+
+  .cam-list { padding: 6px 0; }
+
+  .cam-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 16px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    transition: all 0.15s;
+  }
+
+  .cam-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .cam-item.active { color: var(--text); }
+
+  .cam-status {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+  }
+  .cam-status.live { background: var(--safe); animation: pulse 2s infinite; }
+  .cam-status.warn { background: var(--warn); }
+  .cam-status.alert { background: var(--danger); animation: pulse 0.8s infinite; }
+
+  /* Main area */
+  .main {
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: var(--bg);
+  }
+
+  /* Stat row */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .stat-card.s-safe::after { background: var(--safe); }
+  .stat-card.s-warn::after { background: var(--warn); }
+  .stat-card.s-danger::after { background: var(--danger); }
+  .stat-card.s-accent::after { background: var(--accent); }
+
+  .stat-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .stat-card.s-safe .stat-value { color: var(--safe); }
+  .stat-card.s-warn .stat-value { color: var(--warn); }
+  .stat-card.s-danger .stat-value { color: var(--danger); }
+  .stat-card.s-accent .stat-value { color: var(--accent); }
+
+  .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* Camera grid */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .cam-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .cam-feed {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    aspect-ratio: 16/9;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .cam-feed:hover { border-color: var(--border-bright); }
+  .cam-feed.alert-active { border-color: var(--danger); animation: border-flash 1s ease-in-out infinite; }
+  .cam-feed.warn-active { border-color: var(--warn); }
+
+  @keyframes border-flash {
+    0%, 100% { border-color: var(--danger); box-shadow: 0 0 0 0 rgba(239,68,68,0); }
+    50% { border-color: #f87171; box-shadow: 0 0 0 4px rgba(239,68,68,0.15); }
+  }
+
+  .cam-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .cam-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 10px;
+    pointer-events: none;
+  }
+
+  .cam-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .cam-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    background: rgba(0,0,0,0.7);
+    border: 1px solid var(--border-bright);
+    border-radius: 4px;
+    padding: 3px 7px;
+    color: var(--text);
+    backdrop-filter: blur(4px);
+  }
+
+  .cam-live-pill {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    background: rgba(0,0,0,0.7);
+    border-radius: 4px;
+    padding: 3px 8px;
+    color: var(--safe);
+    backdrop-filter: blur(4px);
+  }
+
+  .alert-banner {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    background: rgba(239,68,68,0.85);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fff;
+    backdrop-filter: blur(4px);
+    animation: slide-in 0.3s ease;
+  }
+
+  .cam-feed.alert-active .alert-banner { display: flex; }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .cam-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .cam-location { font-family: var(--font-mono); font-size: 10px; color: rgba(255,255,255,0.5); }
+
+  /* Bounding box simulation */
+  .bbox {
+    position: absolute;
+    border: 2px solid;
+    border-radius: 2px;
+    pointer-events: none;
+  }
+
+  .bbox-label {
+    position: absolute;
+    top: -18px;
+    left: -1px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    padding: 1px 5px;
+    border-radius: 2px 2px 0 0;
+    white-space: nowrap;
+    font-weight: 700;
+  }
+
+  /* Right panel */
+  .right-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .badge-count {
+    background: var(--danger);
+    color: #fff;
+    border-radius: 20px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 7px;
+    font-weight: 700;
+  }
+
+  .alert-feed { overflow-y: auto; flex: 1; }
+
+  .alert-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .alert-item::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+  }
+
+  .alert-item.critical::before { background: var(--danger); }
+  .alert-item.warning::before { background: var(--warn); }
+  .alert-item.info::before { background: var(--accent); }
+  .alert-item.resolved::before { background: var(--muted); }
+
+  .alert-item:hover { background: rgba(255,255,255,0.03); }
+
+  .alert-item.new { animation: flash-in 0.5s ease; }
+  @keyframes flash-in {
+    from { background: rgba(239,68,68,0.15); }
+    to { background: transparent; }
+  }
+
+  .alert-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 4px;
+  }
+
+  .alert-type {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .alert-time {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .alert-cam { font-size: 11px; color: var(--muted); }
+
+  .alert-tags { display: flex; gap: 5px; margin-top: 5px; }
+
+  .tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .tag.critical { background: rgba(239,68,68,0.15); color: #f87171; border: 1px solid rgba(239,68,68,0.25); }
+  .tag.warning { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.25); }
+  .tag.info { background: rgba(34,211,238,0.12); color: var(--accent); border: 1px solid rgba(34,211,238,0.2); }
+  .tag.resolved { background: rgba(100,116,139,0.15); color: var(--muted); border: 1px solid rgba(100,116,139,0.2); }
+  .tag.dispatched { background: rgba(16,185,129,0.12); color: var(--safe); border: 1px solid rgba(16,185,129,0.2); }
+
+  /* Detection bar */
+  .detection-bar {
+    padding: 14px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+  }
+
+  .det-title { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+
+  .det-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 7px;
+  }
+
+  .det-label { font-size: 11px; color: var(--text); width: 90px; flex-shrink: 0; }
+
+  .det-track {
+    flex: 1;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .det-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+
+  .det-pct { font-family: var(--font-mono); font-size: 10px; color: var(--muted); width: 32px; text-align: right; }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">◈</div>
+    VISIONGUARD
+  </div>
+  <div class="status-bar">
+    <div class="status-pill">
+      <div class="dot-pulse"></div>
+      SYSTEM ACTIVE
+    </div>
+    <span>6 CAMERAS ONLINE</span>
+    <span id="clock">--:--:--</span>
+  </div>
+</div>
+
+<!-- Main layout -->
+<div class="layout">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-label">Navigation</div>
+    <div class="nav-item active"><span class="nav-icon">⬡</span> Live Monitor</div>
+    <div class="nav-item"><span class="nav-icon">◎</span> Incident Log</div>
+    <div class="nav-item" onclick="window.open('heatmap.html','_blank')"><span class="nav-icon">▣</span> Heatmap</div>
+    <div class="nav-item" onclick="window.open('alerts.html','_blank')"><span class="nav-icon">⚑</span> Alert Feed</div>
+    <div class="nav-item"><span class="nav-icon">◈</span> Analytics</div>
+    <div class="nav-item"><span class="nav-icon">⚙</span> Settings</div>
+
+    <div class="sidebar-label" style="margin-top:12px">Camera Zones</div>
+    <div class="cam-list">
+      <div class="cam-item active">
+        <span>CAM-01 · Main Gate</span>
+        <div class="cam-status live"></div>
+      </div>
+      <div class="cam-item">
+        <span>CAM-02 · Platform A</span>
+        <div class="cam-status alert"></div>
+      </div>
+      <div class="cam-item">
+        <span>CAM-03 · Parking</span>
+        <div class="cam-status live"></div>
+      </div>
+      <div class="cam-item">
+        <span>CAM-04 · Exit North</span>
+        <div class="cam-status warn"></div>
+      </div>
+      <div class="cam-item">
+        <span>CAM-05 · Concourse</span>
+        <div class="cam-status live"></div>
+      </div>
+      <div class="cam-item">
+        <span>CAM-06 · Stairwell B</span>
+        <div class="cam-status live"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="main">
+
+    <!-- Stats -->
+    <div class="stat-row">
+      <div class="stat-card s-danger">
+        <div class="stat-label">Active Alerts</div>
+        <div class="stat-value" id="s-alerts">3</div>
+        <div class="stat-sub">↑ 2 in last 10min</div>
+      </div>
+      <div class="stat-card s-warn">
+        <div class="stat-label">Persons Detected</div>
+        <div class="stat-value" id="s-persons">47</div>
+        <div class="stat-sub">Across all cameras</div>
+      </div>
+      <div class="stat-card s-safe">
+        <div class="stat-label">Resolved Today</div>
+        <div class="stat-value">12</div>
+        <div class="stat-sub">Avg response 1m 43s</div>
+      </div>
+      <div class="stat-card s-accent">
+        <div class="stat-label">Model Confidence</div>
+        <div class="stat-value" id="s-conf">94%</div>
+        <div class="stat-sub">Detection accuracy</div>
+      </div>
+    </div>
+
+    <!-- Camera grid -->
+    <div class="section-title">Live Feeds</div>
+
+    <div class="cam-grid">
+      <!-- CAM 01 -->
+      <div class="cam-feed" id="cam1">
+        <canvas class="cam-canvas" id="canvas1"></canvas>
+        <div class="cam-overlay">
+          <div class="cam-header">
+            <div class="cam-badge">CAM-01 · MAIN GATE</div>
+            <div class="cam-live-pill"><div class="dot-pulse"></div>LIVE</div>
+          </div>
+          <div class="cam-footer">
+            <div class="alert-banner" id="alert1">⚠ THREAT DETECTED</div>
+            <div class="cam-location">1920×1080 · 30fps</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAM 02 -->
+      <div class="cam-feed alert-active" id="cam2">
+        <canvas class="cam-canvas" id="canvas2"></canvas>
+        <div class="cam-overlay">
+          <div class="cam-header">
+            <div class="cam-badge">CAM-02 · PLATFORM A</div>
+            <div class="cam-live-pill"><div class="dot-pulse"></div>LIVE</div>
+          </div>
+          <div class="cam-footer">
+            <div class="alert-banner">⚠ AGGRESSIVE BEHAVIOR</div>
+            <div class="cam-location">1920×1080 · 30fps</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAM 03 -->
+      <div class="cam-feed" id="cam3">
+        <canvas class="cam-canvas" id="canvas3"></canvas>
+        <div class="cam-overlay">
+          <div class="cam-header">
+            <div class="cam-badge">CAM-03 · PARKING LOT</div>
+            <div class="cam-live-pill"><div class="dot-pulse"></div>LIVE</div>
+          </div>
+          <div class="cam-footer">
+            <div class="cam-location">1920×1080 · 30fps</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CAM 04 -->
+      <div class="cam-feed warn-active" id="cam4">
+        <canvas class="cam-canvas" id="canvas4"></canvas>
+        <div class="cam-overlay">
+          <div class="cam-header">
+            <div class="cam-badge">CAM-04 · EXIT NORTH</div>
+            <div class="cam-live-pill"><div class="dot-pulse"></div>LIVE</div>
+          </div>
+          <div class="cam-footer">
+            <div class="alert-banner">▲ LOITERING DETECTED</div>
+            <div class="cam-location">1920×1080 · 30fps</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detection confidence bars -->
+    <div class="section-title">Detection Confidence</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+      <div class="det-title">Behavior Classification — Current Frame</div>
+      <div id="det-bars"></div>
+    </div>
+
+  </div>
+
+  <!-- Right panel: Alerts -->
+  <div class="right-panel">
+    <div class="panel-header">
+      Alert Feed
+      <span class="badge-count" id="alert-count">3</span>
+    </div>
+    <div class="alert-feed" id="alert-feed"></div>
+    <div class="detection-bar">
+      <div class="det-title">Actions — Selected Alert</div>
+      <button onclick="dispatchPolice()" style="width:100%;padding:8px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:6px;color:#f87171;font-family:var(--font-head);font-size:12px;font-weight:700;letter-spacing:0.08em;cursor:pointer;transition:all 0.2s;margin-bottom:8px;">
+        ⚑ DISPATCH POLICE
+      </button>
+      <button onclick="markResolved()" style="width:100%;padding:8px;background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.25);border-radius:6px;color:var(--safe);font-family:var(--font-head);font-size:12px;font-weight:700;letter-spacing:0.08em;cursor:pointer;">
+        ✓ MARK RESOLVED
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// Clock
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-IN', {hour12:false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── API CONFIG ────────────────────────────────────────────────
+const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? 'http://localhost:8000'
+  : 'https://vision-guard.onrender.com'; // swap to your Render URL once deployed
+
+let alerts = [];
+let selectedAlertId = null;
+
+function getTime(minOffset) {
+  const d = new Date(Date.now() + minOffset * 60000);
+  return d.toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false});
+}
+
+// ── MAP backend alert → UI shape ──────────────────────────────
+function mapAlert(a) {
+  const sev = a.status === 'resolved' ? 'resolved'
+    : (a.confidence >= 85) ? 'critical'
+    : (a.confidence >= 65) ? 'warning' : 'info';
+  const tags = [sev];
+  if (a.status === 'resolved') tags.push('resolved');
+  return {
+    id: a.id,
+    type: a.threat_detected || 'Threat Detected',
+    cam: a.camera || 'Unknown Camera',
+    time: new Date(a.timestamp).toLocaleTimeString('en-IN', {hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false}),
+    tags,
+    severity: sev,
+    raw: a
+  };
+}
+
+// ── FETCH alerts from backend ─────────────────────────────────
+async function fetchAlerts() {
+  try {
+    const res = await fetch(`${BASE_URL}/alerts/`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    alerts = data.map(mapAlert);
+    renderAlerts();
+  } catch (err) {
+    console.warn('Backend unreachable, using demo data:', err.message);
+    // fallback demo so UI still works offline
+    if (alerts.length === 0) {
+      alerts = [
+        { id:1, type:'Aggressive Behavior', cam:'CAM-02', time: getTime(-1), tags:['critical'], severity:'critical', raw:{id:1} },
+        { id:2, type:'Loitering >3min',    cam:'CAM-04', time: getTime(-7), tags:['warning'],  severity:'warning',  raw:{id:2} },
+        { id:3, type:'Perimeter Breach',   cam:'CAM-01', time: getTime(-30), tags:['resolved'], severity:'resolved', raw:{id:3} },
+      ];
+      renderAlerts();
+    }
+  }
+}
+
+function renderAlerts() {
+  const feed = document.getElementById('alert-feed');
+  feed.innerHTML = alerts.map(a => `
+    <div class="alert-item ${a.severity}" onclick="selectAlert(${a.id})">
+      <div class="alert-row">
+        <div class="alert-type">${a.type}</div>
+        <div class="alert-time">${a.time}</div>
+      </div>
+      <div class="alert-cam">${a.cam}</div>
+      <div class="alert-tags">
+        ${a.tags.map(t => `<span class="tag ${t}">${t.toUpperCase()}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+  const active = alerts.filter(a => a.severity !== 'resolved').length;
+  document.getElementById('alert-count').textContent = active;
+  document.getElementById('s-alerts').textContent = active;
+}
+
+function selectAlert(id) {
+  selectedAlertId = id;
+  document.querySelectorAll('.alert-item').forEach(el => el.style.background = '');
+}
+
+async function dispatchPolice() {
+  const btn = event.target;
+  btn.textContent = '⏳ Dispatching...';
+  // Backend doesn't have a dispatch endpoint yet — mark as UI-only action
+  // When backend adds it: await fetch(`${BASE_URL}/alerts/${selectedAlertId}/dispatch`, {method:'POST'})
+  setTimeout(() => {
+    btn.textContent = '✓ DISPATCHED — ETA 4min';
+    btn.style.background = 'rgba(16,185,129,0.15)';
+    btn.style.color = 'var(--safe)';
+    btn.style.borderColor = 'rgba(16,185,129,0.3)';
+  }, 800);
+}
+
+async function markResolved() {
+  const target = selectedAlertId
+    ? alerts.find(a => a.id === selectedAlertId)
+    : alerts.find(a => a.severity !== 'resolved');
+  if (!target) return;
+  try {
+    await fetch(`${BASE_URL}/alerts/${target.id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'resolved' })
+    });
+  } catch (e) { console.warn('PATCH failed, updating UI only'); }
+  target.severity = 'resolved';
+  target.tags = ['resolved'];
+  renderAlerts();
+}
+
+// Initial load + poll every 10s
+fetchAlerts();
+setInterval(fetchAlerts, 10000);
+
+// Detection bars
+const behaviors = [
+  { label: 'Aggression', pct: 87, color: '#ef4444' },
+  { label: 'Screaming', pct: 72, color: '#f59e0b' },
+  { label: 'Loitering', pct: 65, color: '#f59e0b' },
+  { label: 'Normal Walk', pct: 94, color: '#10b981' },
+  { label: 'Running', pct: 31, color: '#22d3ee' },
+];
+
+document.getElementById('det-bars').innerHTML = behaviors.map(b => `
+  <div class="det-row">
+    <div class="det-label">${b.label}</div>
+    <div class="det-track"><div class="det-fill" style="width:${b.pct}%;background:${b.color}"></div></div>
+    <div class="det-pct">${b.pct}%</div>
+  </div>
+`).join('');
+
+// Simulated camera feeds (canvas-based noise/silhouette simulation)
+const cams = ['canvas1','canvas2','canvas3','canvas4'];
+const ctxs = cams.map(id => {
+  const el = document.getElementById(id);
+  el.width = el.offsetWidth * 2;
+  el.height = el.offsetHeight * 2;
+  return el.getContext('2d');
+});
+
+// Camera scene definitions
+const scenes = [
+  { bg: [15,20,30], personCount: 3, alertLevel: 0 },
+  { bg: [20,10,10], personCount: 5, alertLevel: 2 }, // alert
+  { bg: [10,15,20], personCount: 2, alertLevel: 0 },
+  { bg: [15,18,10], personCount: 1, alertLevel: 1 }, // warn
+];
+
+let tick = 0;
+function drawCameras() {
+  tick++;
+  ctxs.forEach((ctx, i) => {
+    const W = ctx.canvas.width, H = ctx.canvas.height;
+    const sc = scenes[i];
+
+    // Dark bg
+    ctx.fillStyle = `rgb(${sc.bg[0]},${sc.bg[1]},${sc.bg[2]})`;
+    ctx.fillRect(0,0,W,H);
+
+    // Ground line
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, H*0.7);
+    ctx.lineTo(W, H*0.7);
+    ctx.stroke();
+
+    // Perspective lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    for(let x = 0; x <= W; x+=80) {
+      ctx.beginPath();
+      ctx.moveTo(W/2, H*0.4);
+      ctx.lineTo(x, H);
+      ctx.stroke();
+    }
+
+    // Noise grain
+    const imgData = ctx.getImageData(0,0,W,H);
+    for(let j=0;j<imgData.data.length;j+=16) {
+      const n = (Math.random()-0.5)*12;
+      imgData.data[j] = Math.max(0,Math.min(255,imgData.data[j]+n));
+      imgData.data[j+1] = Math.max(0,Math.min(255,imgData.data[j+1]+n));
+      imgData.data[j+2] = Math.max(0,Math.min(255,imgData.data[j+2]+n));
+    }
+    ctx.putImageData(imgData,0,0);
+
+    // Draw persons
+    const personColors = sc.alertLevel>0 ? ['rgba(239,68,68,0.8)','rgba(245,158,11,0.8)'] : ['rgba(34,211,238,0.6)','rgba(129,140,248,0.5)'];
+    for(let p=0;p<sc.personCount;p++) {
+      const px = 80 + p*(W/(sc.personCount+1)) + Math.sin(tick*0.04+p)*8;
+      const py = H*0.68;
+      const ph = 60 + Math.random()*5;
+
+      ctx.fillStyle = personColors[p%personColors.length];
+      // Body
+      ctx.fillRect(px-12, py-ph, 24, ph*0.6);
+      // Head
+      ctx.beginPath();
+      ctx.arc(px, py-ph-10, 10, 0, Math.PI*2);
+      ctx.fill();
+
+      // Bounding box
+      if(sc.alertLevel>0) {
+        ctx.strokeStyle = sc.alertLevel>1 ? '#ef4444' : '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px-18, py-ph-22, 36, ph+22);
+
+        ctx.fillStyle = sc.alertLevel>1 ? '#ef4444' : '#f59e0b';
+        ctx.fillRect(px-18, py-ph-36, 70, 14);
+        ctx.fillStyle='#fff';
+        ctx.font = '10px monospace';
+        ctx.fillText(sc.alertLevel>1?`THREAT ${75+p*8}%`:`WARN ${55+p*9}%`, px-15, py-ph-25);
+      }
+    }
+
+    // Timestamp
+    ctx.fillStyle='rgba(255,255,255,0.4)';
+    ctx.font='11px monospace';
+    ctx.fillText(new Date().toLocaleTimeString('en-IN',{hour12:false}), 10, H-12);
+  });
+  requestAnimationFrame(drawCameras);
+}
+drawCameras();
+
+// Live stats fluctuation
+setInterval(() => {
+  const p = document.getElementById('s-persons');
+  p.textContent = 40 + Math.floor(Math.random()*15);
+  const c = document.getElementById('s-conf');
+  c.textContent = (90+Math.floor(Math.random()*8))+'%';
+}, 3000);
+</script>
+</body>
+</html>
